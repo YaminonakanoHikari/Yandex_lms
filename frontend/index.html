@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Яндекс Лицей — Python</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header>
+    <div class="logo">
+      <span class="logo-icon">Я</span>
+      Яндекс Лицей
+      <span class="logo-sub">/ Python для начинающих</span>
+    </div>
+    <div class="header-score">Баллы: <strong id="totalScore">0</strong></div>
+  </header>
+
+  <div class="layout">
+
+    <!-- Сайдбар со списком задач -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-label">Задачи</div>
+      <div id="taskList">Загрузка...</div>
+    </aside>
+
+    <!-- Основной контент -->
+    <main class="main" id="main">
+      <div class="empty-state">
+        <div class="empty-icon">🐍</div>
+        <div class="empty-title">Выбери задачу слева</div>
+        <div class="empty-sub">Реши задачу — получи баллы и AI-ревью от преподавателя</div>
+      </div>
+    </main>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
