@@ -52,12 +52,15 @@ async function init() {
     document.getElementById('userName').textContent = username
     renderSidebar()
     updateTotalScore()
+
+    // Показываем стикер если решены все RE задачи
+    checkEasterEgg()
   } catch (e) {
     console.error('Ошибка загрузки:', e)
   }
 }
 
-// ── Sidebar ──
+// ── Sidebar с прогресс-барами ──
 function renderSidebar() {
   const topics = {}
   tasks.forEach(t => {
@@ -67,7 +70,20 @@ function renderSidebar() {
 
   let html = ''
   for (const [topic, list] of Object.entries(topics)) {
-    html += `<div class="topic-group"><div class="topic-title">📂 ${topic}</div>`
+    const total = list.length
+    const done = list.filter(t => solved[t.id]).length
+    const pct = total ? Math.round(done / total * 100) : 0
+
+    html += `
+      <div class="topic-group">
+        <div class="topic-title">
+          <span>📂 ${topic}</span>
+          <span class="topic-progress-text">${done}/${total}</span>
+        </div>
+        <div class="topic-progress-bar">
+          <div class="topic-progress-fill" style="width:${pct}%"></div>
+        </div>`
+
     list.forEach(task => {
       const isSolved = solved[task.id]
       const isActive = activeTask?.id === task.id
@@ -82,6 +98,13 @@ function renderSidebar() {
     html += `</div>`
   }
   document.getElementById('taskList').innerHTML = html
+
+  // Анимируем прогресс-бары
+  requestAnimationFrame(() => {
+    document.querySelectorAll('.topic-progress-fill').forEach(el => {
+      el.style.transition = 'width 0.6s cubic-bezier(0.4, 0, 0.2, 1)'
+    })
+  })
 }
 
 // ── Open task ──
@@ -91,13 +114,18 @@ function openTask(taskId) {
   lastReview = ''
   renderSidebar()
   renderTaskView()
+
+  // Закрываем сайдбар на мобилке
+  document.getElementById('sidebar').classList.remove('open')
+  document.getElementById('overlay').classList.remove('open')
 }
 
 function backToList() {
   activeTask = null
   renderSidebar()
-  document.getElementById('main').innerHTML = `
-    <div class="empty-state">
+  const main = document.getElementById('main')
+  main.innerHTML = `
+    <div class="empty-state animate-fade">
       <div class="empty-icon">🐍</div>
       <div class="empty-title">Выбери задачу слева</div>
       <div class="empty-sub">Реши задачу — получи баллы и AI-ревью от преподавателя</div>
@@ -118,7 +146,7 @@ function renderTaskView() {
     </div>`).join('')
 
   document.getElementById('main').innerHTML = `
-    <div class="task-view">
+    <div class="task-view animate-fade">
       <div class="task-desc">
         <div class="breadcrumb">
           <span class="breadcrumb-back" onclick="backToList()">‹ Блоки</span>
@@ -224,10 +252,17 @@ async function submitCode() {
     scores[activeTask.id] = activeTask.points
     renderSidebar()
     updateTotalScore()
+
     const badges = document.querySelector('.task-badges')
     if (badges && !badges.querySelector('.badge-solved')) {
-      badges.innerHTML += `<span class="badge badge-solved">✓ Зачтено ${activeTask.points}/${activeTask.points}</span>`
+      const badge = document.createElement('span')
+      badge.className = 'badge badge-solved animate-pop'
+      badge.textContent = `✓ Зачтено ${activeTask.points}/${activeTask.points}`
+      badges.appendChild(badge)
     }
+
+    checkEasterEgg()
+    showConfetti()
   }
 
   currentTab = 'tests'
@@ -238,6 +273,79 @@ async function submitCode() {
 
   lastReview = 'loading'
   fetchReview(code)
+}
+
+// ── Конфетти при решении ──
+function showConfetti() {
+  const colors = ['#ffcc00', '#00b341', '#4285F4', '#ff4444', '#ff9500']
+  for (let i = 0; i < 30; i++) {
+    const el = document.createElement('div')
+    el.className = 'confetti-piece'
+    el.style.cssText = `
+      position: fixed;
+      top: -10px;
+      left: ${Math.random() * 100}vw;
+      width: 8px; height: 8px;
+      background: ${colors[Math.floor(Math.random() * colors.length)]};
+      border-radius: ${Math.random() > 0.5 ? '50%' : '0'};
+      animation: confetti-fall ${1.5 + Math.random()}s ease-in forwards;
+      animation-delay: ${Math.random() * 0.5}s;
+      z-index: 9999;
+    `
+    document.body.appendChild(el)
+    setTimeout(() => el.remove(), 3000)
+  }
+}
+
+// ── Пасхалка — стикер ровера ──
+function checkEasterEgg() {
+  const reTaskIds = ['re_umbrella', 're_virus', 're_stars']
+  const allReSolved = reTaskIds.every(id => solved[id])
+  if (allReSolved && !document.getElementById('rover-sticker')) {
+    showRoverSticker()
+  }
+}
+
+function showRoverSticker() {
+  const sticker = document.createElement('div')
+  sticker.id = 'rover-sticker'
+  sticker.innerHTML = `
+    <div class="sticker-bubble">
+      <svg width="120" height="100" viewBox="0 0 120 100">
+        <!-- Корпус -->
+        <rect x="25" y="28" width="70" height="44" rx="14" fill="#ffcc00"/>
+        <rect x="29" y="22" width="62" height="38" rx="12" fill="#1a1a1a"/>
+        <!-- Глаза -->
+        <ellipse cx="48" cy="38" rx="9" ry="10" fill="white"/>
+        <ellipse cx="72" cy="38" rx="9" ry="10" fill="white"/>
+        <ellipse cx="48" cy="39" rx="5" ry="6" fill="#1a1a1a"/>
+        <ellipse cx="72" cy="39" rx="5" ry="6" fill="#1a1a1a"/>
+        <circle cx="50" cy="37" r="2" fill="white"/>
+        <circle cx="74" cy="37" r="2" fill="white"/>
+        <!-- Улыбка -->
+        <path d="M52 52 Q60 60 68 52" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+        <!-- Щёчки -->
+        <ellipse cx="36" cy="46" rx="6" ry="4" fill="#ff9999" opacity="0.6"/>
+        <ellipse cx="84" cy="46" rx="6" ry="4" fill="#ff9999" opacity="0.6"/>
+        <!-- Колёса -->
+        <circle cx="36" cy="76" r="9" fill="#1a1a1a"/>
+        <circle cx="36" cy="76" r="5" fill="#333"/>
+        <circle cx="60" cy="78" r="9" fill="#1a1a1a"/>
+        <circle cx="60" cy="78" r="5" fill="#333"/>
+        <circle cx="84" cy="76" r="9" fill="#1a1a1a"/>
+        <circle cx="84" cy="76" r="5" fill="#333"/>
+        <line x1="27" y1="76" x2="93" y2="76" stroke="#222" stroke-width="3"/>
+        <!-- Антенна -->
+        <line x1="60" y1="22" x2="60" y2="10" stroke="#1a1a1a" stroke-width="2"/>
+        <circle cx="60" cy="8" r="4" fill="#ffcc00"/>
+        <!-- Сердечко -->
+        <text x="88" y="22" font-size="18">❤️</text>
+      </svg>
+      <div class="sticker-text">Все RE задачи решены!<br>Так держать! 🎉</div>
+      <button class="sticker-close" onclick="document.getElementById('rover-sticker').remove()">✕</button>
+    </div>
+  `
+  document.body.appendChild(sticker)
 }
 
 // ── AI Review ──
@@ -253,7 +361,8 @@ async function fetchReview(code) {
   } catch {
     lastReview = 'Ошибка соединения с сервером.'
   }
-  document.getElementById('tab-ai').textContent = 'AI-ревью ✨'
+  const tabEl = document.getElementById('tab-ai')
+  if (tabEl) tabEl.textContent = 'AI-ревью ✨'
   if (currentTab === 'ai') renderResultsBody()
 }
 
@@ -296,7 +405,7 @@ function renderResultsBody() {
     if (!lastResults.length) { el.innerHTML = ''; return }
     const allOk = lastResults.every(r => r.ok)
     let html = `
-      <div class="verdict ${allOk ? 'ok' : 'fail'}">
+      <div class="verdict ${allOk ? 'ok' : 'fail'} animate-fade">
         <span>${allOk ? '✅' : '❌'}</span>
         <div>
           <div>${allOk ? 'Все тесты пройдены!' : 'Есть ошибки'}</div>
@@ -333,7 +442,7 @@ function renderResultsBody() {
       el.innerHTML = `<div style="color:var(--muted);font-size:13px">Сначала отправь решение</div>`
       return
     }
-    el.innerHTML = `<div class="ai-text">${formatMd(lastReview)}</div>`
+    el.innerHTML = `<div class="ai-text animate-fade">${formatMd(lastReview)}</div>`
   }
 }
 
@@ -349,7 +458,11 @@ function formatMd(text) {
 function updateTotalScore() {
   const total = Object.values(scores).reduce((a, b) => a + b, 0)
   const el = document.getElementById('totalScore')
-  if (el) el.textContent = total
+  if (el) {
+    el.textContent = total
+    el.classList.add('score-pop')
+    setTimeout(() => el.classList.remove('score-pop'), 400)
+  }
 }
 
 init()

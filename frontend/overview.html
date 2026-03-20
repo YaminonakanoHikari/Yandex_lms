@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Яндекс Лицей — Обзор</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .overview-layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      height: calc(100vh - 88px);
+    }
+    .overview-main {
+      flex: 1;
+      overflow-y: auto;
+      padding: 32px 40px;
+      background: var(--bg);
+    }
+    .overview-sidebar {
+      width: 300px;
+      flex-shrink: 0;
+      border-left: 1px solid var(--border);
+      background: var(--surface);
+      overflow-y: auto;
+      padding: 24px 20px;
+    }
+    .course-title {
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: -0.5px;
+      margin-bottom: 8px;
+      color: var(--text);
+    }
+    .reviewer-card {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+    .reviewer-avatar {
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      background: var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+    .reviewer-name { font-size: 14px; font-weight: 600; color: var(--text); }
+    .reviewer-email { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .section-title {
+      font-size: 20px;
+      font-weight: 800;
+      margin-bottom: 16px;
+      color: var(--text);
+    }
+    .block-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: box-shadow 0.15s, transform 0.1s;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .block-item:hover {
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      transform: translateY(-1px);
+    }
+    .block-info { flex: 1; min-width: 0; }
+    .block-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .block-meta { font-size: 12px; color: var(--muted); }
+    .block-right { text-align: right; min-width: 80px; }
+    .block-pct {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--green);
+      margin-bottom: 6px;
+    }
+    .block-pct.zero { color: var(--muted); }
+    .block-bar {
+      width: 120px;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .block-bar-fill {
+      height: 100%;
+      background: var(--green);
+      border-radius: 2px;
+      transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+    }
+
+    /* Правая колонка — задания */
+    .aside-title {
+      font-size: 16px;
+      font-weight: 800;
+      margin-bottom: 16px;
+      color: var(--text);
+    }
+    .aside-task {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .aside-task:hover { background: var(--light); }
+    .aside-dot {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      flex-shrink: 0;
+      margin-top: 3px;
+    }
+    .aside-dot.solved { background: var(--green); border-color: var(--green); }
+    .aside-dot.failed { background: var(--red); border-color: var(--red); }
+    .aside-task-name { font-size: 13px; font-weight: 500; color: var(--text); }
+    .aside-task-topic { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    /* Статистика */
+    .stats-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 28px;
+      flex-wrap: wrap;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 20px;
+      flex: 1;
+      min-width: 100px;
+      text-align: center;
+    }
+    .stat-value { font-size: 24px; font-weight: 900; color: var(--text); }
+    .stat-label { font-size: 11px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.4px; }
+    .stat-card.green .stat-value { color: var(--green); }
+    .stat-card.yellow .stat-value { color: #e6b800; }
+  </style>
+</head>
+<body>
+  <header>
+    <button class="sidebar-toggle" onclick="history.back()">‹</button>
+    <div class="logo"><span class="logo-y">Я</span>ндекс</div>
+    <div class="nav-links">
+      <div class="nav-link active" onclick="location.href='overview.html'">Обзор</div>
+      <div class="nav-link" onclick="location.href='index.html'">Задания</div>
+      <div class="nav-link" onclick="location.href='schedule.html'">Расписание</div>
+    </div>
+    <div class="header-right">
+      <div class="header-score">Баллы: <strong id="totalScore">0</strong></div>
+      <div class="user-name" id="userName"></div>
+      <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌙</button>
+      <button class="btn-logout" onclick="logout()">Выйти</button>
+    </div>
+  </header>
+
+  <div class="subnav">
+    <div class="subnav-link active" onclick="location.href='overview.html'">Обзор</div>
+    <div class="subnav-link" onclick="location.href='index.html'">Задания</div>
+    <div class="subnav-link" onclick="location.href='schedule.html'">Расписание</div>
+  </div>
+
+  <div class="overview-layout">
+    <div class="overview-main">
+      <div class="course-title">Программирование на Python для начинающих</div>
+
+      <div id="statsRow" class="stats-row"></div>
+
+      <div class="section-title">Блоки</div>
+      <div id="blocksList"></div>
+    </div>
+
+    <aside class="overview-sidebar">
+      <div style="margin-bottom:20px">
+        <div class="aside-title">Ревьюер</div>
+        <div class="reviewer-card">
+          <div class="reviewer-avatar">👨‍🏫</div>
+          <div>
+            <div class="reviewer-name">Краснов Максим</div>
+            <div class="reviewer-email">krasnovmp@yandexlyceum.ru</div>
+          </div>
+        </div>
+      </div>
+      <div class="aside-title">Задания</div>
+      <div id="asideTaskList"></div>
+    </aside>
+  </div>
+
+  <script>
+    const API = 'https://likeable-shauna-interjectionally.ngrok-free.dev'
+    const token = localStorage.getItem('lms_token')
+    if (!token) window.location.href = 'login.html'
+    const username = localStorage.getItem('lms_username') || 'Пользователь'
+
+    function authHeaders() {
+      return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
+    }
+    function logout() { localStorage.clear(); window.location.href = 'login.html' }
+
+    function toggleTheme() {
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
+      document.documentElement.setAttribute('data-theme', isDark ? '' : 'dark')
+      document.getElementById('themeBtn').textContent = isDark ? '🌙' : '☀️'
+      localStorage.setItem('lms_theme', isDark ? 'light' : 'dark')
+    }
+    const savedTheme = localStorage.getItem('lms_theme')
+    if (savedTheme === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark')
+      document.getElementById('themeBtn').textContent = '☀️'
+    }
+
+    async function init() {
+      document.getElementById('userName').textContent = username
+
+      const [tasksRes, progressRes] = await Promise.all([
+        fetch(`${API}/tasks`),
+        fetch(`${API}/progress`, { headers: authHeaders() })
+      ])
+      const tasks = await tasksRes.json()
+      const progress = await progressRes.json()
+
+      const solved = {}
+      const scores = {}
+      Object.entries(progress).forEach(([id, p]) => {
+        if (p.solved) { solved[id] = true; scores[id] = p.score }
+      })
+
+      const totalScore = Object.values(scores).reduce((a, b) => a + b, 0)
+      const totalSolved = Object.keys(solved).length
+      const totalTasks = tasks.length
+      document.getElementById('totalScore').textContent = totalScore
+
+      // Статистика
+      document.getElementById('statsRow').innerHTML = `
+        <div class="stat-card yellow">
+          <div class="stat-value">${totalScore}</div>
+          <div class="stat-label">Баллов набрано</div>
+        </div>
+        <div class="stat-card green">
+          <div class="stat-value">${totalSolved}</div>
+          <div class="stat-label">Задач решено</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">${totalTasks - totalSolved}</div>
+          <div class="stat-label">Осталось</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">${totalTasks ? Math.round(totalSolved/totalTasks*100) : 0}%</div>
+          <div class="stat-label">Прогресс</div>
+        </div>
+      `
+
+      // Блоки по темам
+      const topics = {}
+      tasks.forEach(t => {
+        if (!topics[t.topic]) topics[t.topic] = []
+        topics[t.topic].push(t)
+      })
+
+      let blocksHtml = ''
+      for (const [topic, list] of Object.entries(topics)) {
+        const done = list.filter(t => solved[t.id]).length
+        const total = list.length
+        const pct = total ? Math.round(done / total * 100) : 0
+        const points = list.filter(t => solved[t.id]).reduce((a, t) => a + (scores[t.id] || 0), 0)
+        blocksHtml += `
+          <div class="block-item animate-fade" onclick="location.href='index.html'">
+            <div class="block-info">
+              <div class="block-name">${topic}</div>
+              <div class="block-meta">${done}/${total} заданий зачтено · ${points} баллов</div>
+            </div>
+            <div class="block-right">
+              <div class="block-pct ${pct === 0 ? 'zero' : ''}">${pct}%</div>
+              <div class="block-bar">
+                <div class="block-bar-fill" style="width:${pct}%"></div>
+              </div>
+            </div>
+          </div>`
+      }
+      document.getElementById('blocksList').innerHTML = blocksHtml
+
+      // Список задач справа
+      let asideHtml = ''
+      tasks.slice(0, 15).forEach(task => {
+        const isSolved = solved[task.id]
+        asideHtml += `
+          <div class="aside-task" onclick="location.href='index.html'">
+            <div class="aside-dot ${isSolved ? 'solved' : ''}"></div>
+            <div>
+              <div class="aside-task-name">${task.title}</div>
+              <div class="aside-task-topic">${task.topic}</div>
+            </div>
+          </div>`
+      })
+      document.getElementById('asideTaskList').innerHTML = asideHtml
+    }
+
+    init()
+  </script>
+</body>
+</html>

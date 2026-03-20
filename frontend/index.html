@@ -7,26 +7,26 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
   <header>
     <button class="sidebar-toggle" onclick="toggleSidebar()">☰</button>
     <div class="logo"><span class="logo-y">Я</span>ндекс</div>
     <div class="nav-links">
-      <div class="nav-link">Обзор</div>
+      <div class="nav-link" onclick="location.href='overview.html'">Обзор</div>
       <div class="nav-link active">Задания</div>
-      <div class="nav-link">Расписание</div>
+      <div class="nav-link" onclick="location.href='schedule.html'">Расписание</div>
     </div>
     <div class="header-right">
       <div class="header-score">Баллы: <strong id="totalScore">0</strong></div>
       <div class="user-name" id="userName"></div>
+      <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌙</button>
       <button class="btn-logout" onclick="logout()">Выйти</button>
     </div>
   </header>
 
   <div class="subnav">
-    <div class="subnav-link active">Обзор</div>
-    <div class="subnav-link">Задания</div>
-    <div class="subnav-link">Расписание</div>
+    <div class="subnav-link" onclick="location.href='overview.html'">Обзор</div>
+    <div class="subnav-link active">Задания</div>
+    <div class="subnav-link" onclick="location.href='schedule.html'">Расписание</div>
   </div>
 
   <div class="sidebar-overlay" id="overlay" onclick="toggleSidebar()"></div>
@@ -50,6 +50,19 @@
     function toggleSidebar() {
       document.getElementById('sidebar').classList.toggle('open')
       document.getElementById('overlay').classList.toggle('open')
+    }
+
+    function toggleTheme() {
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
+      document.documentElement.setAttribute('data-theme', isDark ? '' : 'dark')
+      document.getElementById('themeBtn').textContent = isDark ? '🌙' : '☀️'
+      localStorage.setItem('lms_theme', isDark ? 'light' : 'dark')
+    }
+
+    const savedTheme = localStorage.getItem('lms_theme')
+    if (savedTheme === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark')
+      document.getElementById('themeBtn').textContent = '☀️'
     }
   </script>
 </body>

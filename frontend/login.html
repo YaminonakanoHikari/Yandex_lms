@@ -2,6 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Яндекс Лицей — Вход</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -47,6 +48,7 @@
     </div>
 
     <div class="divider-text">или</div>
+
     <a href="https://likeable-shauna-interjectionally.ngrok-free.dev/auth/google" class="btn-google">
       <svg width="18" height="18" viewBox="0 0 18 18">
         <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/>
@@ -56,6 +58,11 @@
       </svg>
       Войти через Google
     </a>
+
+    <a href="#" class="btn-yandex" onclick="showYandexWarning(); return false;">
+      <span style="font-weight:900;font-size:16px;color:#f00">Я</span>
+      Войти через Яндекс
+    </a>
   </div>
 
   <script>
@@ -64,6 +71,9 @@
     if (localStorage.getItem('lms_token')) {
       window.location.href = 'index.html'
     }
+
+    const savedTheme = localStorage.getItem('lms_theme')
+    if (savedTheme === 'dark') document.documentElement.setAttribute('data-theme', 'dark')
 
     function switchAuthTab(tab) {
       document.getElementById('tab-login').classList.toggle('active', tab === 'login')
@@ -77,6 +87,10 @@
       const el = document.getElementById('authError')
       el.textContent = msg
       el.style.display = 'block'
+    }
+
+    function showYandexWarning() {
+      showError('Это клон Яндекс ЛМС — официальное партнёрство не предусмотрено. Используй вход через Google или обычную регистрацию.')
     }
 
     async function doLogin() {
