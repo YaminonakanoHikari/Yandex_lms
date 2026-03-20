@@ -8,19 +8,28 @@
 </head>
 <body>
 
-<header>
-  <div class="logo"><span class="logo-y">Я</span>ндекс</div>
-  <div class="nav-links">
-    <div class="nav-link">Обзор</div>
-    <div class="nav-link active">Задания</div>
-    <div class="nav-link">Расписание</div>
+  <header>
+    <button class="sidebar-toggle" onclick="toggleSidebar()">☰</button>
+    <div class="logo"><span class="logo-y">Я</span>ндекс</div>
+    <div class="nav-links">
+      <div class="nav-link">Обзор</div>
+      <div class="nav-link active">Задания</div>
+      <div class="nav-link">Расписание</div>
+    </div>
+    <div class="header-right">
+      <div class="header-score">Баллы: <strong id="totalScore">0</strong></div>
+      <div class="user-name" id="userName"></div>
+      <button class="btn-logout" onclick="logout()">Выйти</button>
+    </div>
+  </header>
+
+  <div class="subnav">
+    <div class="subnav-link active">Обзор</div>
+    <div class="subnav-link">Задания</div>
+    <div class="subnav-link">Расписание</div>
   </div>
-  <div class="header-right">
-    <div class="header-score">Баллы: <span id="totalScore">0</span></div>
-    <div class="user-name" id="userName"></div>
-    <button class="btn btn-ghost" style="padding:5px 12px;font-size:12px" onclick="logout()">Выйти</button>
-  </div>
-</header>
+
+  <div class="sidebar-overlay" id="overlay" onclick="toggleSidebar()"></div>
 
   <div class="layout">
     <aside class="sidebar" id="sidebar">
@@ -37,5 +46,11 @@
   </div>
 
   <script src="app.js"></script>
+  <script>
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('open')
+      document.getElementById('overlay').classList.toggle('open')
+    }
+  </script>
 </body>
 </html>
