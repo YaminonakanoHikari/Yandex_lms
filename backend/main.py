@@ -1,47 +1,81 @@
 import os
-import httpx
+import ast
+import logging
 from dotenv import load_dotenv
+from sqlalchemy.orm import Session
+
 from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import RedirectResponse
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
 from starlette.middleware.sessions import SessionMiddleware
 from authlib.integrations.starlette_client import OAuth
 
-from backend.runner import run_code
-from backend.tasks import TASKS
-from backend.database import SessionLocal, User, Progress, init_db
-from backend.auth import hash_password, verify_password, create_token, decode_token
+from pydantic import BaseModel
 import anthropic
 
 load_dotenv()
 
-NGROK_URL = os.environ.get("NGROK_URL", "https://likeable-shauna-interjectionally.ngrok-free.dev")
+NGROK_URL = os.getenv("NGROK_URL", "http://localhost:8000")
 FRONTEND_URL = f"{NGROK_URL}/frontend"
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY must be set in .env")
 
-app = FastAPI()
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# ── App ──
+app = FastAPI(docs_url=None, redoc_url=None)  # отключаем публичную документацию
+
+# ── Middleware ──
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, https_only=False, same_site="lax")
+
+# ── Rate limiting ──
+limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
+app.state.limiter = limiter
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(status_code=429, content={"detail": "Слишком много запросов, подожди немного"})
+
+# ── Static ──
 app.mount("/frontend", StaticFiles(directory="frontend", html=True), name="frontend")
-app.add_middleware(SessionMiddleware, secret_key=os.environ.get("SECRET_KEY", "замени-на-случайную-строку"))
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+# ── Imports after app ──
+from backend.docker_runner import run_code_docker as run_code
+from backend.tasks import TASKS
+from backend.database import SessionLocal, User, Progress, init_db
+from backend.auth import hash_password, verify_password, create_token, decode_token
 
 init_db()
-bearer = HTTPBearer()
 
+# ── Google OAuth ──
 oauth = OAuth()
 oauth.register(
     name='google',
-    client_id=os.environ.get('GOOGLE_CLIENT_ID', ''),
-    client_secret=os.environ.get('GOOGLE_CLIENT_SECRET', ''),
+    client_id=os.getenv('GOOGLE_CLIENT_ID', ''),
+    client_secret=os.getenv('GOOGLE_CLIENT_SECRET', ''),
     server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
-    client_kwargs={
-        'scope': 'openid email profile',
-        'timeout': 30,
-    },
+    client_kwargs={'scope': 'openid email profile', 'timeout': 30},
 )
 
+# ── DB ──
 def get_db():
     db = SessionLocal()
     try:
@@ -49,15 +83,38 @@ def get_db():
     finally:
         db.close()
 
-def get_current_user(creds: HTTPAuthorizationCredentials = Depends(bearer), db: Session = Depends(get_db)):
-    payload = decode_token(creds.credentials)
+# ── Auth — поддерживаем оба способа: Bearer токен и cookie ──
+bearer = HTTPBearer(auto_error=False)
+
+def get_current_user(
+    request: Request,
+    creds: HTTPAuthorizationCredentials = Depends(bearer),
+    db: Session = Depends(get_db)
+):
+    token = None
+
+    # Сначала пробуем Bearer заголовок
+    if creds and creds.credentials:
+        token = creds.credentials
+
+    # Потом cookie
+    if not token:
+        token = request.cookies.get("access_token")
+
+    if not token:
+        raise HTTPException(status_code=401, detail="Не авторизован")
+
+    payload = decode_token(token)
     if not payload:
         raise HTTPException(status_code=401, detail="Неверный токен")
+
     user = db.query(User).filter(User.username == payload["sub"]).first()
     if not user:
         raise HTTPException(status_code=401, detail="Пользователь не найден")
+
     return user
 
+# ── Schemas ──
 class RegisterSchema(BaseModel):
     username: str
     email: str
@@ -71,39 +128,106 @@ class Submission(BaseModel):
     task_id: str
     code: str
 
+# ── AST проверка ──
+BANNED_MODULES = {
+    'os', 'sys', 'subprocess', 'socket', 'shutil', 'pathlib',
+    'importlib', 'builtins', 'ctypes', 'threading', 'multiprocessing',
+    'signal', 'pty', 'tty', 'termios', 'fcntl', 'resource',
+    'pickle', 'shelve', 'marshal', 'zipimport',
+}
+BANNED_FUNCS = {
+    'eval', 'exec', '__import__', 'open', 'compile',
+    'globals', 'locals', 'vars', 'breakpoint', 'input',
+}
+BANNED_ATTRS = {
+    'system', 'popen', 'spawn', 'exec', 'eval', 'remove',
+    'rmdir', 'unlink', 'chmod', 'chown', 'kill', 'fork',
+}
+
+def check_ast(code: str) -> str | None:
+    try:
+        tree = ast.parse(code)
+    except SyntaxError as e:
+        return f"Синтаксическая ошибка: {e}"
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                mod = alias.name.split('.')[0]
+                if mod in BANNED_MODULES:
+                    return f"Запрещённый модуль: {mod}"
+
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                mod = node.module.split('.')[0]
+                if mod in BANNED_MODULES:
+                    return f"Запрещённый модуль: {mod}"
+
+        elif isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name):
+                if node.func.id in BANNED_FUNCS:
+                    return f"Запрещённая функция: {node.func.id}"
+            elif isinstance(node.func, ast.Attribute):
+                if node.func.attr in BANNED_ATTRS:
+                    return f"Запрещённый метод: {node.func.attr}"
+
+        # Запрещаем доступ к __dunder__ атрибутам
+        elif isinstance(node, ast.Attribute):
+            if node.attr.startswith('__') and node.attr.endswith('__'):
+                if node.attr not in ('__init__', '__str__', '__repr__', '__len__'):
+                    return f"Запрещённый атрибут: {node.attr}"
+
+    return None
+
+# ── Routes ──
+
 @app.post("/register")
-def register(data: RegisterSchema, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def register(request: Request, data: RegisterSchema, db: Session = Depends(get_db)):
+    if len(data.username) < 3 or len(data.username) > 32:
+        raise HTTPException(400, "Логин должен быть от 3 до 32 символов")
+    if len(data.password) < 6:
+        raise HTTPException(400, "Пароль минимум 6 символов")
     if db.query(User).filter(User.username == data.username).first():
-        raise HTTPException(status_code=400, detail="Имя пользователя занято")
+        raise HTTPException(400, "Имя пользователя занято")
     if db.query(User).filter(User.email == data.email).first():
-        raise HTTPException(status_code=400, detail="Email уже используется")
+        raise HTTPException(400, "Email уже используется")
+
     user = User(username=data.username, email=data.email, hashed_password=hash_password(data.password))
     db.add(user)
     db.commit()
-    return {"token": create_token({"sub": user.username}), "username": user.username}
+    token = create_token({"sub": user.username})
+    return {"token": token, "username": user.username}
+
 
 @app.post("/login")
-def login(data: LoginSchema, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def login(request: Request, data: LoginSchema, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == data.username).first()
     if not user or not verify_password(data.password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="Неверный логин или пароль")
-    return {"token": create_token({"sub": user.username}), "username": user.username}
+        raise HTTPException(401, "Неверный логин или пароль")
+    token = create_token({"sub": user.username})
+    return {"token": token, "username": user.username}
+
 
 @app.get("/me")
 def me(user: User = Depends(get_current_user)):
     return {"username": user.username, "email": user.email}
+
 
 @app.get("/auth/google")
 async def google_login(request: Request):
     redirect_uri = f"{NGROK_URL}/auth/google/callback"
     return await oauth.google.authorize_redirect(request, redirect_uri)
 
+
 @app.get("/auth/google/callback")
 async def google_callback(request: Request, db: Session = Depends(get_db)):
     try:
         token = await oauth.google.authorize_access_token(request)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Ошибка авторизации Google: {e}")
+        logger.error(f"Google OAuth error: {e}")
+        raise HTTPException(400, "Ошибка авторизации Google")
 
     userinfo = token.get('userinfo')
     email = userinfo['email']
@@ -123,15 +247,32 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
     jwt_token = create_token({"sub": user.username})
     return RedirectResponse(f"{FRONTEND_URL}/index.html?token={jwt_token}&username={user.username}")
 
+
 @app.get("/tasks")
 def get_tasks():
     return TASKS
 
+
+@app.get("/progress")
+def get_progress(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    rows = db.query(Progress).filter_by(user_id=user.id).all()
+    return {r.task_id: {"solved": r.solved, "score": r.score} for r in rows}
+
+
 @app.post("/submit")
-def submit(sub: Submission, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def submit(request: Request, sub: Submission, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Проверяем AST до запуска
+    ast_error = check_ast(sub.code)
+    if ast_error:
+        return {"results": [], "passed": 0, "total": 0, "error": ast_error}
+
+    if len(sub.code) > 10_000:
+        raise HTTPException(400, "Код слишком длинный (максимум 10000 символов)")
+
     task = next((t for t in TASKS if t["id"] == sub.task_id), None)
     if not task:
-        raise HTTPException(status_code=404, detail="Задача не найдена")
+        raise HTTPException(404, "Задача не найдена")
 
     results = []
     for test in task["tests"]:
@@ -159,19 +300,24 @@ def submit(sub: Submission, user: User = Depends(get_current_user), db: Session 
 
     return {"results": results, "passed": passed, "total": total}
 
-@app.get("/progress")
-def get_progress(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    rows = db.query(Progress).filter_by(user_id=user.id).all()
-    return {r.task_id: {"solved": r.solved, "score": r.score} for r in rows}
 
 @app.post("/review")
-def review(sub: Submission, user: User = Depends(get_current_user)):
+@limiter.limit("5/minute")
+def review(request: Request, sub: Submission, user: User = Depends(get_current_user)):
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(503, "AI недоступен")
+
     task = next((t for t in TASKS if t["id"] == sub.task_id), None)
     task_title = task["title"] if task else "неизвестная задача"
-    client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+
+    client = anthropic.Anthropic(api_key=api_key)
     msg = client.messages.create(
         model="claude-opus-4-6",
         max_tokens=500,
-        messages=[{"role": "user", "content": f"Ты преподаватель Python. Задача: '{task_title}'.\nПроверь код ученика, дай краткое ревью по-русски. Не давай готовое решение.\n```python\n{sub.code}\n```"}]
+        messages=[{
+            "role": "user",
+            "content": f"Ты преподаватель Python. Задача: '{task_title}'.\nПроверь код ученика, дай краткое ревью по-русски. Не давай готовое решение.\n```python\n{sub.code[:5000]}\n```"
+        }]
     )
     return {"review": msg.content[0].text}
